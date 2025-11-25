@@ -77,7 +77,10 @@ def process_pdf(
             parent_id=parent_page_id,
         )
 
-    print(f"Page uploaded successfully: {result.get('_links', {}).get('base', '')}{result.get('_links', {}).get('webui', '')}")
+    # Build page URL from result links
+    links = result.get("_links", {})
+    page_url = f"{links.get('base', '')}{links.get('webui', '')}"
+    print(f"Page uploaded successfully: {page_url}")
     return result
 
 
