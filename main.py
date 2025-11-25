@@ -61,15 +61,14 @@ def process_pdf(
     )
 
     # Check if page exists and update or create
-    if confluence.page_exists(page_title):
+    existing_page = confluence.get_page_by_title(page_title)
+    if existing_page:
         print("Page exists, updating...")
-        existing_page = confluence.get_page_by_title(page_title)
-        if existing_page:
-            result = confluence.update_page(
-                page_id=existing_page["id"],
-                title=page_title,
-                body=html_content,
-            )
+        result = confluence.update_page(
+            page_id=existing_page["id"],
+            title=page_title,
+            body=html_content,
+        )
     else:
         print("Creating new page...")
         result = confluence.create_page(

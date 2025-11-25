@@ -1,5 +1,7 @@
 """Confluence API module for uploading content to Confluence pages."""
 
+import re
+
 from atlassian import Confluence
 
 
@@ -101,56 +103,49 @@ def format_summary_as_html(summary: str, pdf_filename: str) -> str:
     Returns:
         str: HTML formatted content for Confluence.
     """
-    # Convert markdown-style content to basic HTML
     lines = summary.split("\n")
-    html_lines = []
+    html_parts = []
+    list_items = []
+
+    def flush_list() -> None:
+        """Flush accumulated list items as a ul block."""
+        if list_items:
+            html_parts.append("<ul>")
+            html_parts.extend(list_items)
+            html_parts.append("</ul>")
+            list_items.clear()
 
     for line in lines:
-        line = line.strip()
-        if not line:
+        stripped = line.strip()
+        if not stripped:
+            flush_list()
             continue
 
-        # Handle bullet points
-        if line.startswith("- ") or line.startswith("* "):
-            html_lines.append(f"<li>{line[2:]}</li>")
-        elif line.startswith("• "):
-            html_lines.append(f"<li>{line[2:]}</li>")
-        # Handle headers
-        elif line.startswith("## "):
-            html_lines.append(f"<h2>{line[3:]}</h2>")
-        elif line.startswith("# "):
-            html_lines.append(f"<h1>{line[2:]}</h1>")
-        elif line.startswith("### "):
-            html_lines.append(f"<h3>{line[4:]}</h3>")
+        # Check for list items
+        list_match = re.match(r"^[-*•]\s+(.+)$", stripped)
+        if list_match:
+            list_items.append(f"<li>{list_match.group(1)}</li>")
+            continue
+
+        # Flush any pending list items before other content
+        flush_list()
+
+        # Handle headers (order matters: check longer prefixes first)
+        if stripped.startswith("### "):
+            html_parts.append(f"<h3>{stripped[4:]}</h3>")
+        elif stripped.startswith("## "):
+            html_parts.append(f"<h2>{stripped[3:]}</h2>")
+        elif stripped.startswith("# "):
+            html_parts.append(f"<h1>{stripped[2:]}</h1>")
         else:
-            html_lines.append(f"<p>{line}</p>")
+            html_parts.append(f"<p>{stripped}</p>")
 
-    # Wrap consecutive list items in ul tags
-    content = "\n".join(html_lines)
+    # Flush any remaining list items
+    flush_list()
 
-    # Simple approach: wrap consecutive li elements in ul
-    content = content.replace("</li>\n<li>", "</li><li>")
-    content = content.replace("<li>", "<ul><li>", 1) if "<li>" in content else content
+    content = "\n".join(html_parts)
 
-    # Close all ul tags properly
-    li_count = content.count("<li>")
-    ul_count = content.count("<ul>")
-    if li_count > 0 and ul_count > 0:
-        # Find groups of consecutive li elements and wrap them
-        import re
-
-        content = re.sub(
-            r"(<li>.*?</li>)+",
-            lambda m: f"<ul>{m.group(0)}</ul>",
-            content,
-            flags=re.DOTALL,
-        )
-        # Remove duplicate ul tags
-        content = content.replace("<ul><ul>", "<ul>")
-        content = content.replace("</ul></ul>", "</ul>")
-
-    html_content = f"""
-<h1>PDF要約: {pdf_filename}</h1>
+    return f"""<h1>PDF要約: {pdf_filename}</h1>
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
     <p>このページは、PDFファイル「{pdf_filename}」をGemini AIで要約した内容です。</p>
@@ -159,4 +154,3 @@ def format_summary_as_html(summary: str, pdf_filename: str) -> str:
 <h2>要約内容</h2>
 {content}
 """
-    return html_content
